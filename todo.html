@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>待办事项</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --bg-gradient: linear-gradient(135deg, #e0f4ff 0%, #b8e0f5 50%, #a8d8f0 100%);
+      --glass-bg: rgba(255, 255, 255, 0.4);
+      --glass-border: rgba(255, 255, 255, 0.6);
+      --glass-shadow: 0 8px 32px rgba(136, 180, 220, 0.25);
+      --text: #2d5a7b;
+      --text-muted: #5a8ba8;
+      --accent: #4a9fd9;
+      --accent-hover: #3a8fc9;
+    }
+
+    body {
+      min-height: 100vh;
+      font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg-gradient);
+      color: var(--text);
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 480px;
+      margin-top: min(8vh, 60px);
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 20px 24px;
+      background: var(--glass-bg);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-radius: 16px;
+      border: 1px solid var(--glass-border);
+      box-shadow: var(--glass-shadow);
+      margin-bottom: 20px;
+    }
+
+    .title {
+      font-size: 1.5rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+    .btn-add {
+      width: 40px;
+      height: 40px;
+      border: none;
+      border-radius: 12px;
+      background: var(--accent);
+      color: white;
+      font-size: 1.5rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s, transform 0.15s;
+      flex-shrink: 0;
+    }
+
+    .btn-add:hover {
+      background: var(--accent-hover);
+      transform: scale(1.05);
+    }
+
+    .btn-add:active {
+      transform: scale(0.98);
+    }
+
+    .task-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .task {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 16px 18px;
+      background: var(--glass-bg);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-radius: 12px;
+      border: 1px solid var(--glass-border);
+      box-shadow: 0 4px 20px rgba(136, 180, 220, 0.15);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .task:hover {
+      box-shadow: 0 6px 24px rgba(136, 180, 220, 0.2);
+    }
+
+    .task input[type="checkbox"] {
+      width: 20px;
+      height: 20px;
+      accent-color: var(--accent);
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .task-title {
+      flex: 1;
+      font-size: 0.95rem;
+      outline: none;
+      border: none;
+      background: transparent;
+      color: var(--text);
+    }
+
+    .task-title::placeholder {
+      color: var(--text-muted);
+      opacity: 0.7;
+    }
+
+    .task.done .task-title {
+      text-decoration: line-through;
+      color: var(--text-muted);
+    }
+
+    .btn-delete {
+      width: 32px;
+      height: 32px;
+      border: none;
+      border-radius: 8px;
+      background: rgba(220, 100, 100, 0.3);
+      color: #c55;
+      font-size: 1.1rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0.7;
+      transition: opacity 0.2s, background 0.2s;
+      flex-shrink: 0;
+    }
+
+    .btn-delete:hover {
+      opacity: 1;
+      background: rgba(220, 100, 100, 0.5);
+    }
+
+    .empty-state {
+      padding: 40px 20px;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.9rem;
+    }
+
+    /* 移动端适配 */
+    @media (max-width: 520px) {
+      body {
+        padding: 12px;
+      }
+
+      .header {
+        padding: 16px 18px;
+      }
+
+      .title {
+        font-size: 1.25rem;
+      }
+
+      .task {
+        padding: 14px 16px;
+        gap: 12px;
+      }
+
+      .task-title {
+        font-size: 0.9rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <h1 class="title">待办事项</h1>
+      <button class="btn-add" id="btnAdd" aria-label="添加任务">+</button>
+    </header>
+
+    <ul class="task-list" id="taskList"></ul>
+  </div>
+
+  <script>
+    const taskList = document.getElementById('taskList');
+    const btnAdd = document.getElementById('btnAdd');
+
+    function loadTasks() {
+      const saved = localStorage.getItem('todo-tasks');
+      return saved ? JSON.parse(saved) : [];
+    }
+
+    function saveTasks(tasks) {
+      localStorage.setItem('todo-tasks', JSON.stringify(tasks));
+    }
+
+    function createTask(id, title, done) {
+      const li = document.createElement('li');
+      li.className = 'task' + (done ? ' done' : '');
+      li.dataset.id = id;
+
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.checked = done;
+      checkbox.addEventListener('change', () => toggleTask(id));
+
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'task-title';
+      input.value = title;
+      input.placeholder = '输入任务...';
+      input.addEventListener('change', () => updateTaskTitle(id, input.value));
+
+      const btnDelete = document.createElement('button');
+      btnDelete.className = 'btn-delete';
+      btnDelete.textContent = '×';
+      btnDelete.addEventListener('click', () => deleteTask(id));
+
+      li.append(checkbox, input, btnDelete);
+      return li;
+    }
+
+    function render(tasks) {
+      taskList.innerHTML = '';
+      if (tasks.length === 0) {
+        taskList.innerHTML = '<li class="empty-state">暂无任务，点击 + 添加</li>';
+        return;
+      }
+      tasks.forEach(t => taskList.appendChild(createTask(t.id, t.title, t.done)));
+    }
+
+    function addTask() {
+      const tasks = loadTasks();
+      const id = Date.now().toString();
+      tasks.push({ id, title: '', done: false });
+      saveTasks(tasks);
+      render(tasks);
+      const newInput = taskList.querySelector(`[data-id="${id}"] .task-title`);
+      if (newInput) newInput.focus();
+    }
+
+    function deleteTask(id) {
+      const tasks = loadTasks().filter(t => t.id !== id);
+      saveTasks(tasks);
+      render(tasks);
+    }
+
+    function toggleTask(id) {
+      const tasks = loadTasks();
+      const task = tasks.find(t => t.id === id);
+      if (task) task.done = !task.done;
+      saveTasks(tasks);
+      render(tasks);
+    }
+
+    function updateTaskTitle(id, title) {
+      const tasks = loadTasks();
+      const task = tasks.find(t => t.id === id);
+      if (task) task.title = title.trim();
+      saveTasks(tasks);
+    }
+
+    btnAdd.addEventListener('click', addTask);
+    render(loadTasks());
+  </script>
+</body>
+</html>

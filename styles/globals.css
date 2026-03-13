@@ -1,0 +1,96 @@
+@import "tailwindcss";
+
+/* 复古手账：纸质纹理背景 */
+@theme {
+  --font-hand: "Caveat", "Kalam", "Ma Shan Zheng", cursive;
+}
+
+/* 纸质纹理：使用 CSS 模拟 */
+.paper-texture {
+  background-color: #f5f0e6;
+  background-image:
+    url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E"),
+    linear-gradient(180deg, rgba(240,235,225,0.5) 0%, transparent 50%);
+  min-height: 100vh;
+}
+
+/* 手写字体 */
+.font-journal {
+  font-family: "Caveat", "Kalam", "Ma Shan Zheng", cursive;
+}
+
+/* 手绘复选框样式 */
+.checkbox-hand {
+  width: 1.25rem;
+  height: 1.25rem;
+  border: 2px solid #8b7355;
+  border-radius: 2px;
+  background: #fdfbf7;
+  flex-shrink: 0;
+  cursor: pointer;
+  position: relative;
+  transition: background 0.2s, box-shadow 0.2s;
+}
+.checkbox-hand:hover {
+  box-shadow: 0 0 0 1px #8b7355;
+}
+.checkbox-hand.checked {
+  background: #c4a77d;
+  border-color: #8b7355;
+}
+.checkbox-hand.checked::after {
+  content: "✓";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  color: #3d3229;
+  font-size: 0.75rem;
+  font-weight: bold;
+  font-family: cursive;
+}
+
+/* 完成任务的胶带装饰 */
+.tape-decoration {
+  position: absolute;
+  width: 28px;
+  height: 12px;
+  background: linear-gradient(135deg, rgba(255,220,180,0.85) 0%, rgba(255,200,150,0.9) 100%);
+  transform: rotate(-25deg);
+  top: -4px;
+  right: 8px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+  border-radius: 1px;
+}
+.tape-decoration::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    90deg,
+    transparent,
+    transparent 2px,
+    rgba(255,255,255,0.3) 2px,
+    rgba(255,255,255,0.3) 3px
+  );
+  border-radius: inherit;
+}
+
+/* 图钉装饰（完成项） */
+.pin-decoration {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, #e8b4a0, #c47b6b);
+  box-shadow: 0 2px 3px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.3);
+  top: 6px;
+  left: -4px;
+}
+
+/* 手帐便签 / 纸条效果 */
+.prompt-note {
+  background: linear-gradient(135deg, #fdfbf7 0%, #f8f4ec 100%);
+  box-shadow: 0 2px 8px rgba(139, 115, 85, 0.15), inset 0 1px 0 rgba(255,255,255,0.8);
+  border: 1px solid rgba(139, 115, 85, 0.25);
+}
