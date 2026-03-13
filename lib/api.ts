@@ -73,6 +73,7 @@ export async function fetchChats(): Promise<Chat[]> {
   return res.json();
 }
 
+
 export async function sendChat(txt: string): Promise<Chat> {
   const res = await fetch(`${BASE}/api/chat`, {
     method: 'POST',
