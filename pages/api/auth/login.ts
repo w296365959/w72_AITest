@@ -63,9 +63,13 @@ export default async function handler(
     if (!user) {
       return res.status(401).json({ error: '用户名或密码错误' });
     }
-
-    const match = await comparePassword(parsed.password, user.passwordHash);
-    if (!match) {
+    // 必须校验密码：仅在校验通过后签发 token
+    if (!user.passwordHash || typeof user.passwordHash !== 'string') {
+      console.error('Login: user missing passwordHash', user.id);
+      return res.status(500).json({ error: '账户数据异常，请联系管理员' });
+    }
+    const passwordMatch = await comparePassword(parsed.password, user.passwordHash);
+    if (!passwordMatch) {
       return res.status(401).json({ error: '用户名或密码错误' });
     }
 
