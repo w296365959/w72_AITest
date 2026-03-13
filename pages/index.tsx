@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Task } from '@/types/task';
 import * as api from '@/lib/api';
 import { supabaseClient } from '@/lib/supabase-client';
@@ -307,6 +307,7 @@ function ChatPanel({ onError }: { onError: (msg: string | null) => void }) {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   const loadChats = useCallback(async () => {
     try {
@@ -342,6 +343,15 @@ function ChatPanel({ onError }: { onError: (msg: string | null) => void }) {
     };
   }, []);
 
+  // 消息列表更新后滚动到底部，保证最新消息在可见区域
+  useEffect(() => {
+    if (messages.length === 0) return;
+    const el = scrollContainerRef.current;
+    if (el) {
+      el.scrollTop = el.scrollHeight;
+    }
+  }, [messages]);
+
   const handleSend = async () => {
     const txt = input.trim();
     if (!txt || sending) return;
@@ -370,6 +380,7 @@ function ChatPanel({ onError }: { onError: (msg: string | null) => void }) {
 
       <div className="rounded-lg border-2 border-amber-800/30 bg-amber-50/80 overflow-hidden">
         <div
+          ref={scrollContainerRef}
           className="h-64 overflow-y-auto px-4 py-3 space-y-2 font-journal text-amber-950"
           style={{ minHeight: '16rem' }}
         >
