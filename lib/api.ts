@@ -97,7 +97,17 @@ export async function sendChat(txt: string, options?: SendChatOptions): Promise<
   return res.json();
 }
 
-export async function optimizePrompt(userRequest: string, userInput?: string): Promise<OptimizePromptResult> {
+/** 流式提示词优化：每收到一段内容调用 onChunk，结束时调用 onDone，出错时调用 onError */
+export async function optimizePromptStream(
+  userRequest: string,
+  callbacks: {
+    onChunk: (text: string) => void;
+    onDone: () => void;
+    onError: (err: Error) => void;
+  },
+  userInput?: string
+): Promise<void> {
+  const { onChunk, onDone, onError } = callbacks;
   const res = await fetch(`${BASE}/api/prompts/optimize`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -108,9 +118,59 @@ export async function optimizePrompt(userRequest: string, userInput?: string): P
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error((err as { error?: string }).error || '提示词优化失败');
+    onError(new Error((err as { error?: string }).error || '提示词优化失败'));
+    return;
   }
-  return res.json();
+  const reader = res.body?.getReader();
+  if (!reader) {
+    onError(new Error('无法读取响应流'));
+    return;
+  }
+  const decoder = new TextDecoder();
+  let buffer = '';
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const payload = line.slice(6);
+          if (payload === '[DONE]') {
+            onDone();
+            return;
+          }
+          try {
+            const data = JSON.parse(payload) as { content?: string; error?: string };
+            if (data.error) {
+              onError(new Error(data.error));
+              return;
+            }
+            if (typeof data.content === 'string') onChunk(data.content);
+          } catch {
+            // 忽略单行解析错误
+          }
+        }
+      }
+    }
+    if (buffer.startsWith('data: ')) {
+      const payload = buffer.slice(6).trim();
+      if (payload && payload !== '[DONE]') {
+        try {
+          const data = JSON.parse(payload) as { content?: string; error?: string };
+          if (data.error) onError(new Error(data.error));
+          else if (typeof data.content === 'string') onChunk(data.content);
+        } catch {
+          // ignore
+        }
+      }
+    }
+    onDone();
+  } catch (e) {
+    onError(e instanceof Error ? e : new Error(String(e)));
+  }
 }
 
 // ---------- 认证 API ----------

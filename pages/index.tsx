@@ -229,20 +229,23 @@ function PromptGenPanel({ onError }: { onError: (msg: string | null) => void }) 
   const [optimized, setOptimized] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleOptimize = async () => {
+  const handleOptimize = () => {
     const trimmed = userRequest.trim();
     if (!trimmed) return;
     setLoading(true);
     onError(null);
     setOptimized('');
-    try {
-      const { optimized: result } = await api.optimizePrompt(trimmed);
-      setOptimized(result);
-    } catch (e) {
-      onError(e instanceof Error ? e.message : '优化失败');
-    } finally {
-      setLoading(false);
-    }
+    api.optimizePromptStream(
+      trimmed,
+      {
+        onChunk: (text) => setOptimized((prev) => prev + text),
+        onDone: () => setLoading(false),
+        onError: (e) => {
+          onError(e instanceof Error ? e.message : '优化失败');
+          setLoading(false);
+        },
+      }
+    );
   };
 
   return (
@@ -293,24 +296,26 @@ function PromptGenPanel({ onError }: { onError: (msg: string | null) => void }) 
         </button>
       </div>
 
-      {optimized && (
+      {(loading || optimized) && (
         <div className="relative mt-6 p-5 rounded-lg prompt-note border border-amber-800/20">
           <span className="tape-decoration" style={{ top: '-6px', right: '20%' }} aria-hidden />
           <div className="absolute -left-1 top-6 w-1 h-14 bg-amber-500/50 rounded" />
           <div className="flex items-center justify-between mb-3">
             <span className="text-amber-700/70 font-journal text-sm">生成的 Prompt</span>
-            <button
-              type="button"
-              onClick={() => {
-                void navigator.clipboard.writeText(optimized);
-              }}
-              className="px-2 py-1 rounded text-sm border border-amber-700/40 bg-amber-50 text-amber-800 hover:bg-amber-100 font-journal"
-            >
-              复制
-            </button>
+            {optimized && (
+              <button
+                type="button"
+                onClick={() => {
+                  void navigator.clipboard.writeText(optimized);
+                }}
+                className="px-2 py-1 rounded text-sm border border-amber-700/40 bg-amber-50 text-amber-800 hover:bg-amber-100 font-journal"
+              >
+                复制
+              </button>
+            )}
           </div>
           <pre className="text-amber-950 font-journal text-base whitespace-pre-wrap break-words overflow-x-auto max-h-96 overflow-y-auto leading-relaxed">
-            {optimized}
+            {optimized || (loading ? '生成中…' : '')}
           </pre>
         </div>
       )}

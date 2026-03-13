@@ -1,11 +1,15 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
 import OpenAI from 'openai';
 
-type ErrorResponse = { error: string; details?: unknown };
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
 
-type OptimizeResponse = { optimized: string };
+const SSE_HEADERS = {
+  'Content-Type': 'text/event-stream',
+  'Cache-Control': 'no-cache, no-transform',
+  Connection: 'keep-alive',
+};
 
-/** 元提示词模板（来自 第四讲-元提示词.md） */
+/** 元提示词模板（与 pages/api 保持一致） */
 const META_PROMPT = `# Universal Meta-Prompt v1.0
 
 你是一个 Prompt Engineering 专家，负责将用户的模糊需求转化为高质量的 Prompt。
@@ -114,41 +118,33 @@ function parseBody(body: unknown): { user_request: string; user_input?: string }
   };
 }
 
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse<OptimizeResponse | ErrorResponse>
-) {
-  if (req.method !== 'POST') {
-    res.setHeader('Allow', ['POST']);
-    return res.status(405).json({ error: `方法 ${req.method} 不允许` });
+export async function POST(request: Request) {
+  let parsed: { user_request: string; user_input?: string };
+  try {
+    const body = await request.json();
+    parsed = parseBody(body) ?? null;
+  } catch {
+    return Response.json({ error: '请求体无效', details: '需要提供 user_request（字符串）' }, { status: 400 });
   }
-
-  const parsed = parseBody(req.body);
   if (!parsed) {
-    return res.status(400).json({
-      error: '请求体无效',
-      details: '需要提供 user_request（字符串）',
-    });
+    return Response.json({ error: '请求体无效', details: '需要提供 user_request（字符串）' }, { status: 400 });
   }
 
   const apiKey = process.env.DEEPSEEK_API_KEY;
   if (!apiKey) {
-    return res.status(500).json({
-      error: '服务配置错误',
-      details: '未配置 DEEPSEEK_API_KEY',
-    });
+    return Response.json({ error: '服务配置错误', details: '未配置 DEEPSEEK_API_KEY' }, { status: 500 });
   }
 
+  const baseURL = process.env.UIUIAPI_BASE_URL;
+  const openai = new OpenAI({ apiKey, baseURL });
+  const userInput = parsed.user_input ?? parsed.user_request;
+  const systemPrompt = META_PROMPT
+    .replace(/\{\{user_request\}\}/g, parsed.user_request)
+    .replace(/\{\{user_input\}\}/g, userInput);
+
+  let stream: AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>;
   try {
-    const baseURL = process.env.UIUIAPI_BASE_URL;
-    const openai = new OpenAI({ apiKey, baseURL });
-
-    const userInput = parsed.user_input ?? parsed.user_request;
-    const systemPrompt = META_PROMPT
-      .replace(/\{\{user_request\}\}/g, parsed.user_request)
-      .replace(/\{\{user_input\}\}/g, userInput);
-
-    const completion = await openai.chat.completions.create({
+    stream = await openai.chat.completions.create({
       model: 'deepseek-chat',
       messages: [
         {
@@ -156,28 +152,35 @@ export default async function handler(
           content:
             '你是一个 Prompt Engineering 专家。请严格按用户给出的元提示词模板，分析其需求并生成完整、可用的结构化 Prompt。直接输出最终的 Prompt 内容，不要加多余说明。',
         },
-        {
-          role: 'user',
-          content: systemPrompt,
-        },
+        { role: 'user', content: systemPrompt },
       ],
       temperature: 0.4,
+      stream: true,
     });
-
-    const rawContent = completion.choices?.[0]?.message?.content?.trim() ?? '';
-    if (!rawContent) {
-      return res.status(502).json({
-        error: 'AI 未返回有效内容',
-        details: '空响应',
-      });
-    }
-
-    return res.status(200).json({ optimized: rawContent });
   } catch (e) {
-    console.error('POST /api/prompts/optimize unexpected error:', e);
-    return res.status(500).json({
-      error: '服务器错误',
-      details: String(e),
-    });
+    console.error('POST /api/prompts/optimize create error:', e);
+    return Response.json({ error: '服务器错误', details: String(e) }, { status: 500 });
   }
+
+  const encoder = new TextEncoder();
+  const readable = new ReadableStream({
+    async start(controller) {
+      try {
+        for await (const chunk of stream) {
+          const delta = chunk.choices?.[0]?.delta?.content;
+          if (typeof delta === 'string' && delta.length > 0) {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content: delta })}\n\n`));
+          }
+        }
+        controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+      } catch (e) {
+        console.error('POST /api/prompts/optimize stream error:', e);
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: '流式输出异常' })}\n\n`));
+      } finally {
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(readable, { headers: SSE_HEADERS });
 }
