@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { Task } from '@/types/task';
 import * as api from '@/lib/api';
+import { supabaseClient } from '@/lib/supabase-client';
 
-type TabId = 'todo' | 'prompt';
+type TabId = 'todo' | 'prompt' | 'chat';
 
 type TaskNode = Task & { children: TaskNode[] };
 
@@ -26,7 +27,7 @@ function buildTree(tasks: Task[]): TaskNode[] {
 }
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState<TabId>('todo');
+  const [activeTab, setActiveTab] = useState<TabId>('chat');
   const [tasks, setTasks] = useState<Task[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(true);
@@ -112,6 +113,17 @@ export default function Home() {
         <div className="flex gap-1 mb-8 p-1 rounded-lg bg-amber-100/60 border border-amber-800/20">
           <button
             type="button"
+            onClick={() => setActiveTab('chat')}
+            className={`flex-1 py-2 px-4 rounded-md font-journal text-lg transition-colors ${
+              activeTab === 'chat'
+                ? 'bg-amber-200/90 text-amber-950 shadow-sm'
+                : 'text-amber-800/80 hover:bg-amber-150/60'
+            }`}
+          >
+            聊天互动
+          </button>
+          <button
+            type="button"
             onClick={() => setActiveTab('todo')}
             className={`flex-1 py-2 px-4 rounded-md font-journal text-lg transition-colors ${
               activeTab === 'todo'
@@ -142,6 +154,8 @@ export default function Home() {
 
         {activeTab === 'prompt' ? (
           <PromptGenPanel onError={setError} />
+        ) : activeTab === 'chat' ? (
+          <ChatPanel onError={setError} />
         ) : (
           <>
         <h1 className="text-4xl font-bold text-amber-900/90 mb-8 font-journal tracking-tight">
@@ -284,6 +298,115 @@ function PromptGenPanel({ onError }: { onError: (msg: string | null) => void }) 
           </pre>
         </div>
       )}
+    </div>
+  );
+}
+
+function ChatPanel({ onError }: { onError: (msg: string | null) => void }) {
+  const [messages, setMessages] = useState<api.Chat[]>([]);
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
+
+  const loadChats = useCallback(async () => {
+    try {
+      const data = await api.fetchChats();
+      setMessages(data);
+    } catch (e) {
+      onError(e instanceof Error ? e.message : '加载聊天失败');
+    } finally {
+      setLoading(false);
+    }
+  }, [onError]);
+
+  useEffect(() => {
+    loadChats();
+  }, [loadChats]);
+
+  // Supabase Realtime：订阅 chat 表 INSERT，有新消息时直接追加
+  useEffect(() => {
+    const client = supabaseClient;
+    if (!client) return;
+    const channel = client
+      .channel('chat-realtime')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'chat' },
+        (payload: { new: api.Chat }) => {
+          setMessages((prev) => [...prev, payload.new]);
+        }
+      )
+      .subscribe();
+    return () => {
+      client.removeChannel(channel);
+    };
+  }, []);
+
+  const handleSend = async () => {
+    const txt = input.trim();
+    if (!txt || sending) return;
+    setSending(true);
+    onError(null);
+    try {
+      await api.sendChat(txt);
+      setInput('');
+      // 发送后由 Realtime 推送更新，无需再 loadChats；若 Realtime 未配置则手动拉一次
+      if (!supabaseClient) await loadChats();
+    } catch (e) {
+      onError(e instanceof Error ? e.message : '发送失败');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <h1 className="text-4xl font-bold text-amber-900/90 font-journal tracking-tight">
+        聊天互动
+      </h1>
+      <p className="text-amber-800/70 font-journal text-lg">
+        在此输入内容并发送，另一浏览器会同步显示。
+      </p>
+
+      <div className="rounded-lg border-2 border-amber-800/30 bg-amber-50/80 overflow-hidden">
+        <div
+          className="h-64 overflow-y-auto px-4 py-3 space-y-2 font-journal text-amber-950"
+          style={{ minHeight: '16rem' }}
+        >
+          {loading ? (
+            <p className="text-amber-700/70">加载中…</p>
+          ) : messages.length === 0 ? (
+            <p className="text-amber-700/60">暂无消息，发送一条试试～</p>
+          ) : (
+            messages.map((m) => (
+              <div
+                key={m.id}
+                className="py-1.5 px-3 rounded-md bg-amber-100/60 border border-amber-800/20 text-base break-words"
+              >
+                {m.txt}
+              </div>
+            ))
+          )}
+        </div>
+        <div className="flex gap-2 p-3 border-t border-amber-800/20">
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+            placeholder="输入消息..."
+            className="flex-1 px-4 py-2.5 rounded-md border-2 border-amber-800/30 bg-white text-amber-950 placeholder-amber-600/60 font-journal focus:outline-none focus:border-amber-700/50"
+          />
+          <button
+            type="button"
+            onClick={handleSend}
+            disabled={sending || !input.trim()}
+            className="px-5 py-2.5 rounded-md border-2 border-amber-800/40 bg-amber-100 text-amber-900 font-semibold hover:bg-amber-200/80 disabled:opacity-50 font-journal"
+          >
+            {sending ? '发送中…' : '发送'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

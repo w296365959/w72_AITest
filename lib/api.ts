@@ -62,6 +62,30 @@ export async function breakdownTask(taskId: string): Promise<BreakdownResult> {
 
 export type OptimizePromptResult = { optimized: string };
 
+export type Chat = import('@/types/chat').Chat;
+
+export async function fetchChats(): Promise<Chat[]> {
+  const res = await fetch(`${BASE}/api/chat`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { error?: string }).error || '获取聊天记录失败');
+  }
+  return res.json();
+}
+
+export async function sendChat(txt: string): Promise<Chat> {
+  const res = await fetch(`${BASE}/api/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ txt }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { error?: string }).error || '发送失败');
+  }
+  return res.json();
+}
+
 export async function optimizePrompt(userRequest: string, userInput?: string): Promise<OptimizePromptResult> {
   const res = await fetch(`${BASE}/api/prompts/optimize`, {
     method: 'POST',

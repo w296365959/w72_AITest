@@ -1,10 +1,10 @@
 /**
  * Tasks API 测试脚本
  * 使用: node scripts/test-api.mjs
- * 可选: API_BASE=http://localhost:3000 node scripts/test-api.mjs
+ * 可选: API_BASE=http://localhost:3001 node scripts/test-api.mjs
  */
 
-const BASE = process.env.API_BASE || 'http://localhost:3000';
+const BASE = process.env.API_BASE || 'http://localhost:3001';
 const API = `${BASE}/api/tasks`;
 
 function log(name, ok, detail = '') {
