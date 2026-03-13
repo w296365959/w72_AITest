@@ -8,6 +8,7 @@
 create table if not exists public.chat (
   id uuid primary key default gen_random_uuid(),
   txt text not null,
+  sender_name text,
   created_at timestamptz not null default now()
 );
 
@@ -19,6 +20,9 @@ create policy "Allow all for chat"
   for all
   using (true)
   with check (true);
+
+-- 若表已存在，可单独执行以添加发送人字段：
+-- alter table public.chat add column if not exists sender_name text;
 
 -- 启用 Realtime：chat 表变更时推送
 alter publication supabase_realtime add table public.chat;

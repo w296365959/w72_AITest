@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import Link from 'next/link';
 import type { Task } from '@/types/task';
 import * as api from '@/lib/api';
 import { supabaseClient } from '@/lib/supabase-client';
+import { useAuth } from '@/contexts/AuthContext';
 
 type TabId = 'todo' | 'prompt' | 'chat';
 
@@ -27,6 +29,7 @@ function buildTree(tasks: Task[]): TaskNode[] {
 }
 
 export default function Home() {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<TabId>('chat');
   const [tasks, setTasks] = useState<Task[]>([]);
   const [input, setInput] = useState('');
@@ -109,6 +112,19 @@ export default function Home() {
   return (
     <div className="paper-texture min-h-screen font-journal">
       <div className="max-w-2xl mx-auto px-4 py-8">
+        {/* 登录/注册入口 */}
+        <div className="flex justify-end gap-3 mb-4 text-sm">
+          {user ? (
+            <Link href="/profile" className="text-[#8b7355] hover:underline">
+              {user.displayName || user.username}
+            </Link>
+          ) : (
+            <>
+              <Link href="/login" className="text-[#8b7355] hover:underline">登录</Link>
+              <Link href="/register" className="text-[#8b7355] hover:underline">注册</Link>
+            </>
+          )}
+        </div>
         {/* Tab 切换 */}
         <div className="flex gap-1 mb-8 p-1 rounded-lg bg-amber-100/60 border border-amber-800/20">
           <button
@@ -302,12 +318,26 @@ function PromptGenPanel({ onError }: { onError: (msg: string | null) => void }) 
   );
 }
 
+const CHAT_GUEST_ID_KEY = 'chat_guest_id';
+
+function getOrCreateGuestLabel(): string {
+  if (typeof window === 'undefined') return '访客';
+  let id = localStorage.getItem(CHAT_GUEST_ID_KEY);
+  if (!id) {
+    id = Math.random().toString(36).slice(2, 8);
+    localStorage.setItem(CHAT_GUEST_ID_KEY, id);
+  }
+  return `访客-${id}`;
+}
+
 function ChatPanel({ onError }: { onError: (msg: string | null) => void }) {
+  const { user } = useAuth();
   const [messages, setMessages] = useState<api.Chat[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const guestLabel = useRef(getOrCreateGuestLabel()).current;
 
   const loadChats = useCallback(async () => {
     try {
@@ -343,13 +373,15 @@ function ChatPanel({ onError }: { onError: (msg: string | null) => void }) {
     };
   }, []);
 
-  // 消息列表更新后滚动到底部，保证最新消息在可见区域
+  // 消息列表更新后滚动到底部（含初次加载、新消息），保证最新消息在可见区域
   useEffect(() => {
     if (messages.length === 0) return;
     const el = scrollContainerRef.current;
-    if (el) {
+    if (!el) return;
+    const rafId = requestAnimationFrame(() => {
       el.scrollTop = el.scrollHeight;
-    }
+    });
+    return () => cancelAnimationFrame(rafId);
   }, [messages]);
 
   const handleSend = async () => {
@@ -358,7 +390,7 @@ function ChatPanel({ onError }: { onError: (msg: string | null) => void }) {
     setSending(true);
     onError(null);
     try {
-      await api.sendChat(txt);
+      await api.sendChat(txt, user ? undefined : { senderName: guestLabel });
       setInput('');
       // 发送后由 Realtime 推送更新，无需再 loadChats；若 Realtime 未配置则手动拉一次
       if (!supabaseClient) await loadChats();
@@ -394,7 +426,10 @@ function ChatPanel({ onError }: { onError: (msg: string | null) => void }) {
                 key={m.id}
                 className="py-1.5 px-3 rounded-md bg-amber-100/60 border border-amber-800/20 text-base break-words"
               >
-                {m.txt}
+                <span className="text-sm text-amber-700/80 font-journal">
+                  {m.sender_name ?? '匿名'}
+                </span>
+                <p className="mt-0.5 text-amber-950">{m.txt}</p>
               </div>
             ))
           )}
